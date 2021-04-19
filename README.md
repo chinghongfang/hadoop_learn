@@ -21,35 +21,52 @@ and press "建立主機網路".
 
 ## 網路設定+安裝SSH+增加使用者
 Open terminal. -> Run commands in the shell script.
-If someone want to use shell script,
-```shell=
-$sudo chmod +x master_run.sh
-```
-The shell script does *"apt-get update"*, *"set netcard"*, *"install ssh"*, and *"add user"*.
+*"apt-get update"*, *"set netcard"*, *"install ssh"*, and *"add user"*.  
 
-On master machine
-```shell=
-$sudo chmod +x master_run.sh
-$sudo master_run.sh 192.168.57
-```
+**On master machine**
+使用`$ip a`檢查192.168.56.的網路名稱是否為enp0s8，如果是其他名稱以下全部enp0s8都換成該名稱。
+![ip a](picture/pic10.png)
 
-On slave01 machine
 ```shell=
-$sudo chmod +x slave_run.sh
-$sudo master_run.sh 192.168.57 101
-```
-On slave02 machine
-```shell=
-$sudo chmod +x slave_run.sh
-$sudo master_run.sh 192.168.57 102
-```
+$sudo apt-get update
 
-登出並登入剛剛設定的使用者，之後hadoop操作都使用此使用者。
+$sudo echo -e "auto enp0s8\niface enp0s8 inet static\naddress 192.168.56.100\nnetmask 255.255.255.0\nnetwork 192.168.56.0" >> /etc/network/interfaces
+$sudo ifup enp0s8
+
+# install ssh
+$sudo apt-get install openssh-server
+
+### Create new account for running hadoop ###
+$sudo useradd -m hadoop -s /bin/bash
+$sudo passwd hadoop
+$sudo adduser hadoop sudo
+```
+Change to another account.  
+
+**On slave01 machine**
+```shell=
+$sudo apt-get update
+
+$sudo echo -e "auto enp0s8\niface enp0s8 inet static\naddress 192.168.56.101\nnetmask 255.255.255.0\nnetwork 192.168.56.0" >> /etc/network/interfaces
+$sudo ifup enp0s8
+
+# install ssh
+$sudo apt-get install openssh-server
+
+### Create new account for running hadoop ###
+$sudo useradd -m hadoop -s /bin/bash
+$sudo passwd hadoop
+$sudo adduser hadoop sudo
+```
+Change to another account.<br/>
+
+
+登出並登入剛剛設定的使用者，之後hadoop操作都使用此使用者。<br/>
 ![pic02](picture/pic02.png)
 
 ### 安裝java+安裝hadoop+增加hosts+SSH設定
-* 安裝jdk
-Hadoop是java的程式
+* 安裝jdk  
+因為Hadoop是java的程式
 ```shell=
 sudo apt-get install openjdk-8-jdk
 ```
@@ -57,9 +74,11 @@ sudo apt-get install openjdk-8-jdk
 ```shell=
 sudo wget http://downloads.apache.org/hadoop/common/hadoop-3.3.0/hadoop-3.3.0.tar.gz
 sudo tar -zxvf ./hadoop-3.3.0.tar.gz -C /usr/local
+cd /usr/local
+sudo mv hadoop-3.3.0 ./hadoop
 sudo chown -R hadoop:hadoop ./hadoop
 ```
-* 增加hosts
+* 增加hosts  
 為了以後以名字代替輸入ip。
 ```shell=
 sudo nano /etc/hosts
@@ -67,28 +86,28 @@ sudo nano /etc/hosts
 Append master01 ip, slave02 ip, slave03 ip,...
 ![/etc/hosts](picture/pic04.png)
 
-* SSH設定
+* SSH設定  
 （這裡沒有寫在shell script裡面）
-*在master主機*裡設定ssh連線
+*在master主機*裡設定ssh連線<br/>
 這樣以後master登入slave就不用輸入密碼
 ```shell=
 mkdir ~/.ssh
 cd ~/.ssh
 ssh-keygen -t rsa
 cat ~/.ssh/id_rsa.pub >> ~/.ssh/authorized_keys
-scp ~/.ssh/id_rsa.pub hadoop@slave02:/home/hadoop/
-scp ~/.ssh/id_rsa.pub hadoop@slave03:/home/hadoop/
+scp ~/.ssh/id_rsa.pub hadoop@slave02-VirtualBox:/home/hadoop/
+scp ~/.ssh/id_rsa.pub hadoop@slave03-VirtualBox:/home/hadoop/
 # ......
 ```
 
-*在slave主機*
+*在slave主機*  
 把SSH公鑰保存到對應位置
 ```shell=
 cat ~/id_rsa.pub >> ~/.ssh/authorized_keys
 ```
 
 可在master測試是否有辦法無密碼登入
-![無密碼登入](picture/pic05)
+![無密碼登入](picture/pic05.png)
 
 ### 配置分散式系統
 在master機器，進入hadoop資料夾
@@ -99,14 +118,15 @@ cd /usr/local/hadoop/etc/hadoop
 ```shell=
 sudo nano workers
 ```
-改成以下內容
+按照要工作的機器，改變內容。（比如要工作的機器是slave01-VirtualBox、slave02-VirtualBox、slave03-VirtualBox）
+則改成以下內容
 ```
 slave01-VirtualBox
 slave02-VirtualBox
 slave03-VirtualBox
 ```
 * core-site.xml
-把`<configuration></configuration>`改成以下內容
+把`<configuration></configuration>`改成以下內容<br/>
 （**master01-VirtualBox**部分改成自己機器的名稱）
 ```
 <configuration>
@@ -123,8 +143,8 @@ slave03-VirtualBox
 ```
 
 * hdfs-site.xml
-把`<configuration></configuration>`改成以下內容
-（**master01-VirtualBox**部分改成自己機器的名稱）
+把`<configuration></configuration>`改成以下內容<br/>
+（**master01-VirtualBox**部分改成自己機器的名稱）<br/>
 （`dfs.replication`是檔案份數，增加容錯、資料備份、讀取速度等）
 ```
 <configuration>
@@ -153,6 +173,18 @@ slave03-VirtualBox
     <property>
         <name>mapreduce.framework.name</name>
         <value>yarn</value>
+    </property>
+    <property>
+        <name>yarn.app.mapreduce.am.env</name>
+        <value>HADOOP_MAPRED_HOME=/usr/local/hadoop</value>
+    </property>
+    <property>
+        <name>mapreduce.map.env</name>
+        <value>HADOOP_MAPRED_HOME=/usr/local/hadoop</value>
+    </property>
+    <property>
+        <name>mapreduce.reduce.env</name>
+        <value>HADOOP_MAPRED_HOME=/usr/local/hadoop</value>
     </property>
 </configuration>
 ```

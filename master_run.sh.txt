@@ -1,0 +1,23 @@
+#!/bin/bash
+sudo apt-get update
+
+if [ $# -lt 1 ]; then
+	echo "Input example:./master_run.sh 192.168.57"
+else
+	sudo echo -e "auto enp0s8\niface enp0s8 inet static\naddress ${1}.100\nnetmask 255.255.255.0\nnetwork ${1}.0" >> /etc/network/interfaces
+
+
+sudo ifup enp0s8
+
+# install ssh
+echo "Install ssh"
+sudo apt-get install openssh-server
+
+### Create new account for running hadoop ###
+echo "Create new account for running hadoop"
+sudo useradd -m hadoop -s /bin/bash
+sudo passwd hadoop
+sudo adduser hadoop sudo
+echo -e "\e[101mChange another account\e[0m"
+
+fi

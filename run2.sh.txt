@@ -1,0 +1,23 @@
+#!/bin/bash
+echo "====Installing jdk8===="
+sudo apt-get install openjdk-8-jdk
+#nano ~/.bashrc
+# Add "export JAVA_HOME=/usr/lib/jvm/java-8-openjdk-amd64" to the ~/.bashrc file
+# Ctrl+O
+# Ctrl+X
+source ~/.bashrc
+
+echo "====Installing hadoop===="
+wget https://downloads.apache.org/hadoop/common/hadoop-3.3.0/hadoop-3.3.0.tar.gz
+sudo tar -zxvf ./hadoop-3.3.0.tar.gz -C /usr/local
+cd /usr/local/
+sudo mv ./hadoop-3.3.0 ./hadoop
+sudo chown -R hadoop:hadoop ./hadoop
+
+# Change ip to your own value
+echo "====Add hosts===="
+name=$( sudo cat /etc/hostname )
+sudo echo -e "192.168.57.100\t${name}" >> /etc/hosts
+sudo echo -e "192.168.57.101\tslave01-VirtualBox" >> /etc/hosts
+
+

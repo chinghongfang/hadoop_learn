@@ -38,7 +38,6 @@ public class WordCount {
 
         // Retrieving the contents
         String content = doc.body().text();
-        System.out.printf("\u001B[101m 2 \u001B[0m\n");
         try {
             FileSystem fs = (new Path("/user/hadoop")).getFileSystem(new Configuration());
             FSDataOutputStream stream = fs.create(new Path(store_path + "/main_page.txt"));
@@ -53,7 +52,7 @@ public class WordCount {
         // Retrieving all the hrefs
         Elements links = doc.select("a[href]");
         int count = 0;
-        // Run all links, and download them.
+        // Browse all links, and download them.
         for (Element link : links){
             // control the max web pages
             ++count;
@@ -62,7 +61,7 @@ public class WordCount {
             if (url == link.attr("abs:href")) continue;
             conn = Jsoup.connect(link.attr("abs:href"));
             try {
-                // Write href to input directory
+                // Write content to directory
                 FileSystem fs = (new Path("/user/hadoop")).getFileSystem(new Configuration());
                 FSDataOutputStream stream = fs.create(new Path(store_path + "/" + link.text()));
                 byte[] text = conn.get().body().text().getBytes();
@@ -111,9 +110,7 @@ public class WordCount {
         Configuration conf = new Configuration();
         Job job = Job.getInstance(conf, "Web get");
         // Store many website in sequence
-        System.out.println("Now crawling...");
         crawl(args[0], conf, "WordCount/input");
-        System.out.println("Crawl end.");
 
         // hadoop example code
         conf = new Configuration();
