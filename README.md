@@ -1,179 +1,65 @@
-# Hadoop Learn
+# 網頁字頻計算
+目標：使用hadoop MapReduce計算網頁字頻，網頁數量達某種程度。  
+方法：先將要計算的網頁搜集到hdfs儲存，再使用FileInputFormat.addInputPath()設定輸入資料夾。交給hadoop預設去分配MapReduce工作。<br/>
+To do：<br/>
+1. 不下載網頁內容，直接計算各網頁字頻。
+2. 改token parsing，如：不計算標點符號
+
+## 結果
+編譯
+```shell=
+/usr/local/hadoop/bin/hadoop com.sun.tools.javac.Main WordCount.java
+jar cf wc.jar WordCount*.class
+```
+執行前檢查是否有WordCount/input資料夾。若沒有
+```shell=
+bin/hdfs dfs -mkdir WordCount
+bin/hdfs dfs -mkdir WordCount/input
+```
+執行（目前預設只取21個網頁）
+```shell=
+bin/hadoop jar wc.jar WordCount https://hadoop.apache.org /user/hadoop/wordcount/output
+```
+結果
+```shell=
+bin/hadoop fs -cat wordcount/output/part-r-00000
+```
+
 ## 建置
-Hadoop is a distributive system. We need more than one machine to 
-test it.
+看`how_to_build.md`  
 
-Here I use VirtualBox to build two virtual machines with ubuntu 
-version ubuntu-18.04.5-desktop.
+## 程式碼說明
+### 抓網頁
+先使用jsoup抓取某網站內的所有連結，再抓取連結網頁的內容。抓取後暫存入input directory(暫定抓上限20個網頁)，再計算這些網頁內容的字頻。
+#### 使用jsoup
+1. Download jsoup-x.x.x.jar
+2. Add `/usr/local/hadoop/jsoupp-x.x.x.jar` to `HADOOP_CLASSPATH`
 
-### Ubuntu安裝選項
-* Minimal installation
-* Other options: (None)
-* Erase disk and install Ubuntu
+### 計算字頻
+（取自hadoop document example code）
 
-### Virtual machine settings
-VirtualBox使用方法：（略過）
-[VirtualBox](https://www.virtualbox.org)
-* After installing ubuntu desktop, connect them by entering "主機網路管理員"
-and press "建立主機網路".
-![主機網路管理員](picture/pic01.png)
-* For two virtual machines, 設定>網路>介面卡2>附加到：僅限主機介面卡
+## 可改進的一些想法
+1. 不儲存網頁內容，直接分散計算網頁字頻<br/>
+先把要計算字頻的**網址**們存成一個一個的檔案，存在HDFS；改寫map method，由原本"計算檔案內字頻"，改成"取得檔案內連結->取得網頁內容->計算字頻"。如此一來，就可以省儲存空間，如果網頁們大小超過HDFS block size。
 
-## 網路設定+安裝SSH+增加使用者
-Open terminal. -> Run commands in the shell script.
-*"apt-get update"*, *"set netcard"*, *"install ssh"*, and *"add user"*.  
+2. 計算單字、不計標點符號<br/>
+可參考[Example: WordCount v2.0](https://hadoop.apache.org/docs/stable/hadoop-mapreduce-client/hadoop-mapreduce-client-core/MapReduceTutorial.html#Example:_WordCount_v2.0)
+使用distributedCache放置read-only資料（這裡是skip\_pattern\_file），在setup method讀取pattern，然後在map method挑出所有skip pattern替換掉。
 
-**On master machine**
-使用`$ip a`檢查192.168.56.的網路名稱是否為enp0s8，如果是其他名稱以下全部enp0s8都換成該名稱。
-![ip a](picture/pic10.png)
+## Error
 
-```shell=
-$sudo apt-get update
+* (Solved) When excecuting `$bin/hadoop jar wc.jar WordCount https://hadoop.apache.org /user/hadoop/wordcount/output`
+Executing `bin/hdfs dfs -put etc/hadoop/*.xml input` also causes the same problem
+`
+File /user/hadoop/input/main\_page.txt could only be wirtten to 0 of the 1 minReplication nodes. There is 0 datanode(s) running and 0 node(s) are excluded in this operation
+`
+解決方法：是因為容量不足導致。個人推測因虛擬機是採用動態配置空間，所以hadoop誤以爲空間不足，導致無法儲存檔案。
+所以我在`/usr/local/hadoop/tmp`多塞一些檔案，讓VirtualBox配置
+空間，之後再刪除，便可完整執行。
 
-$sudo echo -e "auto enp0s8\niface enp0s8 inet static\naddress 192.168.56.100\nnetmask 255.255.255.0\nnetwork 192.168.56.0" >> /etc/network/interfaces
-$sudo ifup enp0s8
-
-# install ssh
-$sudo apt-get install openssh-server
-
-### Create new account for running hadoop ###
-$sudo useradd -m hadoop -s /bin/bash
-$sudo passwd hadoop
-$sudo adduser hadoop sudo
+* (Solved) HADOOP\_MAPRED\_HOME
+檢查`/usr/local/hadoop/etc/hadoop/mapred-siet.xml`的`<configuration>`裡面有沒有設定`HADOOP_MAPRED_HOME`
 ```
-Change to another account.  
-
-**On slave01 machine**
-```shell=
-$sudo apt-get update
-
-$sudo echo -e "auto enp0s8\niface enp0s8 inet static\naddress 192.168.56.101\nnetmask 255.255.255.0\nnetwork 192.168.56.0" >> /etc/network/interfaces
-$sudo ifup enp0s8
-
-# install ssh
-$sudo apt-get install openssh-server
-
-### Create new account for running hadoop ###
-$sudo useradd -m hadoop -s /bin/bash
-$sudo passwd hadoop
-$sudo adduser hadoop sudo
-```
-Change to another account.<br/>
-
-
-登出並登入剛剛設定的使用者，之後hadoop操作都使用此使用者。<br/>
-![pic02](picture/pic02.png)
-
-### 安裝java+安裝hadoop+增加hosts+SSH設定
-* 安裝jdk  
-因為Hadoop是java的程式
-```shell=
-sudo apt-get install openjdk-8-jdk
-```
-* 安裝hadoop
-```shell=
-sudo wget http://downloads.apache.org/hadoop/common/hadoop-3.3.0/hadoop-3.3.0.tar.gz
-sudo tar -zxvf ./hadoop-3.3.0.tar.gz -C /usr/local
-cd /usr/local
-sudo mv hadoop-3.3.0 ./hadoop
-sudo chown -R hadoop:hadoop ./hadoop
-```
-* 增加hosts  
-為了以後以名字代替輸入ip。
-```shell=
-sudo nano /etc/hosts
-```
-Append master01 ip, slave02 ip, slave03 ip,...
-![/etc/hosts](picture/pic04.png)
-
-* SSH設定  
-（這裡沒有寫在shell script裡面）
-*在master主機*裡設定ssh連線<br/>
-這樣以後master登入slave就不用輸入密碼
-```shell=
-mkdir ~/.ssh
-cd ~/.ssh
-ssh-keygen -t rsa
-cat ~/.ssh/id_rsa.pub >> ~/.ssh/authorized_keys
-scp ~/.ssh/id_rsa.pub hadoop@slave02-VirtualBox:/home/hadoop/
-scp ~/.ssh/id_rsa.pub hadoop@slave03-VirtualBox:/home/hadoop/
-# ......
-```
-
-*在slave主機*  
-把SSH公鑰保存到對應位置
-```shell=
-cat ~/id_rsa.pub >> ~/.ssh/authorized_keys
-```
-
-可在master測試是否有辦法無密碼登入
-![無密碼登入](picture/pic05.png)
-
-### 配置分散式系統
-在master機器，進入hadoop資料夾
-```shell=
-cd /usr/local/hadoop/etc/hadoop
-```
-* workers
-```shell=
-sudo nano workers
-```
-按照要工作的機器，改變內容。（比如要工作的機器是slave01-VirtualBox、slave02-VirtualBox、slave03-VirtualBox）
-則改成以下內容
-```
-slave01-VirtualBox
-slave02-VirtualBox
-slave03-VirtualBox
-```
-* core-site.xml
-把`<configuration></configuration>`改成以下內容<br/>
-（**master01-VirtualBox**部分改成自己機器的名稱）
-```
-<configuration>
-    <property>
-        <name>fs.defaultFS</name>
-        <value>hdfs://master01-VirtualBox:9000</value>
-    </property>
-    <property>
-        <name>hadoop.tmp.dir</name>
-        <value>file:/usr/local/hadoop/tmp</value>
-        <description>Abase for other temporary directories.</description>
-    </property>
-</configuration>
-```
-
-* hdfs-site.xml
-把`<configuration></configuration>`改成以下內容<br/>
-（**master01-VirtualBox**部分改成自己機器的名稱）<br/>
-（`dfs.replication`是檔案份數，增加容錯、資料備份、讀取速度等）
-```
-<configuration>
-    <property>
-        <name>dfs.namenode.secondary.http-address</name>
-        <value>master01-VirtualBox:50090</value>
-    </property>
-    <property>
-        <name>dfs.namenode.name.dir</name>
-        <value>file:/usr/local/hadoop/tmp/dfs/name</value>
-    </property>
-    <property>
-        <name>dfs.datanode.data.dir</name>
-        <value>file:/usr/local/hadoop/tmp/dfs/data</value>
-    </property>
-    <property>
-        <name>dfs.replication</name>
-        <value>3</value>
-    </property>
-</configuration>
-```
-* mapred-site.xml
-把`<configuration></configuration>`改成以下內容
-```
-<configuration>
-    <property>
-        <name>mapreduce.framework.name</name>
-        <value>yarn</value>
-    </property>
     <property>
         <name>yarn.app.mapreduce.am.env</name>
         <value>HADOOP_MAPRED_HOME=/usr/local/hadoop</value>
@@ -186,69 +72,10 @@ slave03-VirtualBox
         <name>mapreduce.reduce.env</name>
         <value>HADOOP_MAPRED_HOME=/usr/local/hadoop</value>
     </property>
-</configuration>
-```
-* yarn-site.xml
-```
-<configuration>
-    <property>
-        <name>yarn.resourcemanager.hostname</name>
-        <value>master01-VirtualBox</value>
-    </property>
-    <property>
-        <name>yarn.nodemanager.aux-services</name>
-        <value>mapreduce_shuffle</value>
-    </property>
-</configuration>
-```
-設定`JAVA_HOME`
-```shell=
-nano ~/.bashrc
-```
-![.bashrc](picture/pic06.png)
-```shell=
-source ~/.bashrc
-```
-接著把hadoop打包給其他機器，免去再次設定：
-```shell=
-# cd /usr/local/
-sudo tar -zcf ./hadoop.tar.gz ./hadoop
-scp ./hadoop.tar.gz slave01-VirtualBox:/home/hadoop
-scp ./hadoop.tar.gz slave02-VirtualBox:/home/hadoop
-# ...
-```
-傳送過去以後，去workers機器解壓縮
-```shell=
-sudo tar -zxf ~/hadoop.tar.gz -C /usr/local
 ```
 
-## Hadoop啟動
-* 切換到hadoop資料夾(`cd /usr/local/hadoop/`)
-* **第一次啟動**要format
-```shell=
-bin/hdfs namenode -format
-```
-![After format](picture/pic07.png)
-* 之後要啟動執行以下兩個指令就好
-```shell=
-sbin/start-dfs.sh
-sbin/start-yarn.sh
-```
+## Reference
 
-* 檢查服務程序
-`jps`
-master01-VirtualBox
-![master jps](picture/pic08.png)
-slave02-VirtualBox
-![slave jps](picture/pic09.png)
-
-新增資料夾
-```shell=
-bin/hdfs dfs -mkdir /user
-bin/hdfs dfs -mkdir /user/hadoop
-```
-
-## Rference
-[Hadoop 簡易架設不求人](http://www.cc.ntu.edu.tw/chinese/epaper/0036/20160321_3609.html)
-[Hadoop 3.2.0 安裝教學與介紹](https://medium.com/@sleo1104/hadoop-3-2-0-安裝教學與介紹-22aa183be33a)
-[Hadoop: Setting up a Single Node Cluster.](https://hadoop.apache.org/docs/stable/hadoop-project-dist/hadoop-common/SingleCluster.html)
+[MapReduce Tutorial](https://hadoop.apache.org/docs/stable/hadoop-mapreduce-client/hadoop-mapreduce-client-core/MapReduceTutorial.html)  
+[Apache Hadoop Main 3.3.0 API](https://hadoop.apache.org/docs/r3.3.0/api/index.html)  
+[How to read the contents of a webpage into a string in java?](https://www.tutorialspoint.com/how-to-read-the-contents-of-a-webpage-into-a-string-in-java)  
