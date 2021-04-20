@@ -56,14 +56,19 @@ public class WordCount {
         for (Element link : links){
             // control the max web pages
             ++count;
-            if (count > max_page) break;
+            //if (count > max_page) break;
 
             if (url == link.attr("abs:href")) continue;
             conn = Jsoup.connect(link.attr("abs:href"));
+	    if (conn == null) continue;
             try {
                 // Write content to directory
                 FileSystem fs = (new Path("/user/hadoop")).getFileSystem(new Configuration());
-                FSDataOutputStream stream = fs.create(new Path(store_path + "/" + link.text()));
+		Path file_name = new Path(store_path+"/"+link.text().replaceAll("/", ""));
+		if (fs.exists(file_name)) continue;
+		System.out.printf(" get %s\n", link.text());
+                FSDataOutputStream stream = fs.create(file_name);
+		if (conn.get().body() == null) continue;
                 byte[] text = conn.get().body().text().getBytes();
                 stream.write(text);
                 fs.close();
